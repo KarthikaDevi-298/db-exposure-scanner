@@ -1,0 +1,108 @@
+try:
+    from faker import Faker
+except:
+    import os
+    os.system("pip install faker")
+    from faker import Faker
+
+import json
+import time
+from datetime import datetime
+
+
+# ---------- 1) Generate synthetic dataset ----------
+def make_synthetic(n=200, filename="synthetic_users.json"):
+    fake = Faker()
+    records = []
+
+    for i in range(n):
+        records.append({
+            "id": i,
+            "name": fake.name(),
+            "email": fake.unique.email(),
+            "phone": fake.phone_number(),
+            "city": fake.city(),
+            "ssn_like": fake.bothify("###-##-####")
+        })
+
+    with open(filename, "w") as f:
+        json.dump(records, f, indent=2)
+
+    return filename, len(records)
+
+
+# ---------- 2) Simulated database ----------
+def create_fake_db(auth_enabled=False):
+    return {
+        "host": "203.0.113.5",
+        "port": 27017,
+        "auth_enabled": auth_enabled,
+        "data_file": "synthetic_users.json",
+        "created_at": datetime.utcnow().isoformat() + "Z"
+    }
+
+
+# ---------- 3) Scanner ----------
+def scan_db(db):
+    print(f"\n[SCAN] Target: {db['host']}:{db['port']}")
+
+    if not db["auth_enabled"]:
+        print("  -> STATUS: EXPOSED")
+        severity = "HIGH"
+        findings = "Unauthenticated access possible."
+    else:
+        print("  -> STATUS: SECURED")
+        severity = "LOW"
+        findings = "Authentication enabled."
+
+    return {
+        "host": db["host"],
+        "port": db["port"],
+        "status": ("EXPOSED" if not db["auth_enabled"] else "SECURED"),
+        "severity": severity,
+        "findings": findings
+    }
+
+
+# ---------- 4) Containment ----------
+def contain_db(db):
+    print("\n[CONTAIN] Applying fix...")
+    time.sleep(1)
+    db["auth_enabled"] = True
+    print("  -> Authentication enabled.")
+    return db
+
+
+# ---------- 5) Report ----------
+def make_report(scan_before, scan_after, db, record_count):
+    return {
+        "incident_time": datetime.utcnow().isoformat() + "Z",
+        "target": f"{db['host']}:{db['port']}",
+        "records_affected_estimate": record_count,
+        "initial_status": scan_before["status"],
+        "initial_severity": scan_before["severity"],
+        "remediation": "Enabled authentication",
+        "final_status": scan_after["status"],
+        "final_severity": scan_after["severity"],
+    }
+
+
+# ---------- Run ----------
+if __name__ == "__main__":
+    print("== Misconfigured DB Scanner Demo ==")
+
+    fname, count = make_synthetic(200)
+    print(f"[+] Generated {count} records -> {fname}")
+
+    fake_db = create_fake_db(auth_enabled=False)
+
+    before = scan_db(fake_db)
+    fake_db = contain_db(fake_db)
+    after = scan_db(fake_db)
+
+    report = make_report(before, after, fake_db, count)
+
+    print("\n[INCIDENT REPORT]")
+    print(json.dumps(report, indent=2))
+
+    print("\nDone.")
